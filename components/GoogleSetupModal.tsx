@@ -67,7 +67,7 @@ export const GoogleSetupModal: React.FC<GoogleSetupModalProps> = ({ isOpen, onCl
             <ol className="list-decimal list-inside space-y-2 text-sm ml-2">
               <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center">Google Cloud Console <ExternalLink size={12} className="ml-1"/></a>.</li>
               <li>Create a <strong>New Project</strong>.</li>
-              <li>Go to <strong>APIs & Services > Library</strong> and enable:
+              <li>Go to <strong>APIs & Services &gt; Library</strong> and enable:
                 <ul className="list-disc list-inside ml-4 text-slate-500 mt-1">
                   <li>Google Drive API</li>
                   <li>Google Sheets API</li>
