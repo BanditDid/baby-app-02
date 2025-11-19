@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Settings, UploadCloud, Sparkles, Image as ImageIcon, X, Search, LayoutGrid, LayoutList, XCircle, LogIn, CheckCircle, Loader2, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Settings, UploadCloud, Sparkles, Image as ImageIcon, X, Search, LayoutGrid, LayoutList, XCircle, LogIn, CheckCircle, Loader2, HelpCircle, LogOut, Baby, Calendar } from 'lucide-react';
 import { Button } from './components/Button';
 import { MemoryCard } from './components/MemoryCard';
 import { MemoryListItem } from './components/MemoryListItem';
@@ -11,7 +11,7 @@ import { analyzeImage } from './services/geminiService';
 import { MOOD_CONFIG } from './constants';
 import { compressImage } from './utils/imageUtils';
 import { saveMemoryToDB, deleteMemoryFromDB, getAllMemoriesFromDB, migrateFromLocalStorage } from './services/storageService';
-import { loadGoogleApi, handleGoogleLogin, uploadImageToDrive, appendToSheet, getGapiClient, isGoogleConfigured, setGoogleConfig } from './services/googleCloudService';
+import { loadGoogleApi, handleGoogleLogin, uploadImageToDrive, appendToSheet, getGapiClient, isGoogleConfigured, setGoogleConfig, getUserProfile, validateUserAccess } from './services/googleCloudService';
 
 // Helper to safely extract error message
 const getErrorMessage = (error: any): string => {
@@ -41,14 +41,17 @@ const App: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   
-  // Google Auth State
+  // Auth & Security State
   const [isGoogleReady, setIsGoogleReady] = useState(false);
-  const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false); // Controls access to the main app
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(false);
   
   // View & Filter State
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [searchText, setSearchText] = useState('');
   const [filterMood, setFilterMood] = useState<Mood | 'ALL'>('ALL');
+  const [filterYear, setFilterYear] = useState<string>('ALL');
 
   // Form State
   const [selectedFiles, setSelectedFiles] = useState<MemoryImage[]>([]);
@@ -66,8 +69,6 @@ const App: React.FC = () => {
             const savedProfile = localStorage.getItem('baby_profile');
             if (savedProfile) {
                 setProfile(JSON.parse(savedProfile));
-            } else {
-                setIsSettingsOpen(true);
             }
 
             // 2. Load Google Config
@@ -95,12 +96,14 @@ const App: React.FC = () => {
     // Load Google API
     loadGoogleApi(() => {
         setIsGoogleReady(true);
-        const gapi = getGapiClient();
-        if (gapi && gapi.client && gapi.client.getToken()) {
-            setIsGoogleSignedIn(true);
-        }
     });
   }, []);
+
+  // Calculate available years for filtering
+  const availableYears = useMemo(() => {
+      const years = new Set(memories.map(m => new Date(m.date).getFullYear().toString()));
+      return Array.from(years).sort().reverse();
+  }, [memories]);
 
   const handleGoogleSignIn = async () => {
       if (!isGoogleConfigured()) {
@@ -109,14 +112,47 @@ const App: React.FC = () => {
           return;
       }
 
+      setIsCheckingAuth(true);
+
       try {
           await handleGoogleLogin();
-          setIsGoogleSignedIn(true);
-          alert("Connected to Google!");
+          
+          // 1. Get User Profile
+          const userProfile = await getUserProfile();
+          const userEmail = userProfile.email;
+          
+          // 2. Check Whitelist
+          console.log("Checking access for:", userEmail);
+          const hasAccess = await validateUserAccess(userEmail);
+
+          if (hasAccess) {
+              setCurrentUser(userEmail);
+              setIsAuthorized(true);
+              // If profile isn't set, prompt setting it up
+              if (!localStorage.getItem('baby_profile')) {
+                  setIsSettingsOpen(true);
+              }
+          } else {
+              alert("Access Denied. Your email is not listed in the 'Login' sheet.");
+              // Force logout logic if needed, or just don't authorize
+              setIsAuthorized(false);
+              const gapi = getGapiClient();
+              if (gapi) gapi.client.setToken(null); // Clear token
+          }
+
       } catch (error: any) {
           console.error("Login failed", error);
-          alert(`Failed to connect to Google: ${getErrorMessage(error)}`);
+          alert(`Login Failed: ${getErrorMessage(error)}`);
+      } finally {
+          setIsCheckingAuth(false);
       }
+  };
+
+  const handleLogout = () => {
+      setIsAuthorized(false);
+      setCurrentUser(null);
+      const gapi = getGapiClient();
+      if (gapi) gapi.client.setToken(null);
   };
 
   const handleSaveSettings = (newProfile: ChildProfile, config: GoogleConfig) => {
@@ -193,10 +229,6 @@ const App: React.FC = () => {
   };
 
   const openAddModal = () => {
-    if (!profile) {
-      setIsSettingsOpen(true);
-      return;
-    }
     setEditingId(null);
     setSelectedFiles([]);
     setNote('');
@@ -243,10 +275,10 @@ const App: React.FC = () => {
             setMemories(prev => [updatedMemory, ...prev]);
         }
 
-        if (isGoogleSignedIn) {
+        if (isAuthorized) {
             try {
                 if (!isGoogleConfigured()) {
-                    throw new Error("Google Cloud credentials missing. Please check Settings.");
+                    throw new Error("Google Cloud credentials missing.");
                 }
                 
                 const imageUrls: string[] = [];
@@ -287,16 +319,90 @@ const App: React.FC = () => {
     }
   };
 
+  // --- LOGIN SCREEN ---
+  if (!isAuthorized) {
+      return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+              <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 max-w-md w-full text-center space-y-8">
+                  <div className="flex justify-center mb-4">
+                       <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center text-rose-500">
+                          <Baby size={40} />
+                       </div>
+                  </div>
+                  
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-800">BabySteps Journal</h1>
+                    <p className="text-slate-500 mt-2">Secure Family Memory Tracker</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <button 
+                        onClick={handleGoogleSignIn}
+                        disabled={!isGoogleReady || isCheckingAuth}
+                        className="w-full py-3 px-4 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center gap-3 hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-70 disabled:cursor-wait group"
+                    >
+                        {isCheckingAuth ? (
+                            <Loader2 size={20} className="animate-spin text-rose-500" />
+                        ) : (
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                            </svg>
+                        )}
+                        <span className="font-semibold text-slate-700 group-hover:text-slate-900">
+                            {isCheckingAuth ? "Verifying Access..." : "Sign in with Google"}
+                        </span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-4 pt-4 border-t border-slate-100">
+                      <button 
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="text-xs text-slate-400 hover:text-rose-500 flex items-center gap-1"
+                      >
+                          <Settings size={14} /> App Settings (API Keys)
+                      </button>
+                      <button 
+                        onClick={() => setIsSetupOpen(true)}
+                        className="text-xs text-slate-400 hover:text-blue-500 flex items-center gap-1"
+                      >
+                          <HelpCircle size={14} /> Setup Guide
+                      </button>
+                  </div>
+              </div>
+              
+              {/* Modals available in Login screen too */}
+              <SettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                profile={profile}
+                onSave={handleSaveSettings}
+              />
+              <GoogleSetupModal
+                isOpen={isSetupOpen}
+                onClose={() => setIsSetupOpen(false)}
+              />
+          </div>
+      );
+  }
+
+  // --- MAIN APP (Authorized) ---
+  
   const filteredMemories = memories.filter(memory => {
     const matchesMood = filterMood === 'ALL' || memory.mood === filterMood;
-    const searchLower = searchText.toLowerCase();
     
+    const memoryYear = new Date(memory.date).getFullYear().toString();
+    const matchesYear = filterYear === 'ALL' || memoryYear === filterYear;
+
+    const searchLower = searchText.toLowerCase();
     const matchesSearch = 
         memory.note.toLowerCase().includes(searchLower) || 
         memory.calculatedAge.toLowerCase().includes(searchLower) ||
         formatDate(memory.date).toLowerCase().includes(searchLower);
     
-    return matchesMood && matchesSearch;
+    return matchesMood && matchesSearch && matchesYear;
   });
 
   if (isLoadingData) {
@@ -323,26 +429,15 @@ const App: React.FC = () => {
           )}
         </div>
         <div className="flex gap-2 items-center">
-           <button
-              onClick={() => setIsSetupOpen(true)}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"
-              title="Google Setup Help"
-            >
-              <HelpCircle size={20} />
-           </button>
-
+           <div className="hidden sm:block text-xs text-slate-400 mr-2">
+             {currentUser}
+           </div>
            <button 
-             onClick={handleGoogleSignIn}
-             className={`p-2 rounded-full transition-colors flex items-center gap-1 ${
-                 !isGoogleReady 
-                 ? 'bg-slate-100 text-slate-400 cursor-wait opacity-50' 
-                 : isGoogleSignedIn 
-                     ? 'bg-green-50 text-green-600' 
-                     : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-             }`}
-             title={isGoogleSignedIn ? "Connected to Google" : "Connect Google Drive"}
+             onClick={handleLogout}
+             className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
+             title="Logout"
            >
-             {!isGoogleReady ? <Loader2 size={20} className="animate-spin" /> : (isGoogleSignedIn ? <CheckCircle size={20} /> : <LogIn size={20} />)}
+             <LogOut size={20} />
            </button>
           <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-slate-500 bg-slate-50 rounded-full hover:bg-slate-100">
             <Settings size={20} />
@@ -358,7 +453,7 @@ const App: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                     type="text" 
-                    placeholder="Search age, notes, or date..."
+                    placeholder="Search text..."
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
                     className="w-full pl-10 pr-9 py-2 rounded-xl border-slate-200 focus:border-rose-500 focus:ring-rose-500 text-sm shadow-sm bg-white"
@@ -373,55 +468,72 @@ const App: React.FC = () => {
                 )}
             </div>
 
-            {/* Filters & Toggle */}
-            <div className="flex justify-between items-center gap-3">
-                {/* Mood Chips */}
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1 mask-linear-fade">
-                    <button
-                        onClick={() => setFilterMood('ALL')}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                            filterMood === 'ALL' 
-                            ? 'bg-slate-800 text-white shadow-md' 
-                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
+            {/* Filters Row 2 */}
+            <div className="flex flex-col sm:flex-row gap-3">
+                {/* Year Filter */}
+                <div className="relative shrink-0">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <select
+                        value={filterYear}
+                        onChange={(e) => setFilterYear(e.target.value)}
+                        className="pl-9 pr-8 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-700 bg-white focus:ring-rose-500 focus:border-rose-500 w-full sm:w-auto appearance-none"
                     >
-                        All
-                    </button>
-                    {(Object.keys(MOOD_CONFIG) as Mood[]).map(mood => {
-                        const isActive = filterMood === mood;
-                        const config = MOOD_CONFIG[mood];
-                        return (
-                            <button
-                                key={mood}
-                                onClick={() => setFilterMood(mood)}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                                    isActive
-                                    ? `${config.color} ring-2 ring-offset-1 ring-slate-200 shadow-sm`
-                                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                }`}
-                            >
-                                <span>{config.label}</span>
-                            </button>
-                        );
-                    })}
+                        <option value="ALL">All Years</option>
+                        {availableYears.map(year => (
+                            <option key={year} value={year}>{year}</option>
+                        ))}
+                    </select>
                 </div>
 
-                {/* View Toggle */}
-                <div className="flex bg-white rounded-lg border border-slate-200 p-1 shrink-0 shadow-sm">
-                    <button 
-                        onClick={() => setViewMode('card')}
-                        className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-rose-100 text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                        title="Card View"
-                    >
-                        <LayoutGrid size={18} />
-                    </button>
-                    <button 
-                        onClick={() => setViewMode('list')}
-                        className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-rose-100 text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                        title="List View"
-                    >
-                        <LayoutList size={18} />
-                    </button>
+                <div className="flex justify-between items-center gap-3 flex-1 min-w-0">
+                    {/* Mood Chips */}
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 flex-1 mask-linear-fade">
+                        <button
+                            onClick={() => setFilterMood('ALL')}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                                filterMood === 'ALL' 
+                                ? 'bg-slate-800 text-white shadow-md' 
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                        >
+                            All
+                        </button>
+                        {(Object.keys(MOOD_CONFIG) as Mood[]).map(mood => {
+                            const isActive = filterMood === mood;
+                            const config = MOOD_CONFIG[mood];
+                            return (
+                                <button
+                                    key={mood}
+                                    onClick={() => setFilterMood(mood)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                                        isActive
+                                        ? `${config.color} ring-2 ring-offset-1 ring-slate-200 shadow-sm`
+                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <span>{config.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* View Toggle */}
+                    <div className="flex bg-white rounded-lg border border-slate-200 p-1 shrink-0 shadow-sm">
+                        <button 
+                            onClick={() => setViewMode('card')}
+                            className={`p-1.5 rounded-md transition-all ${viewMode === 'card' ? 'bg-rose-100 text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            title="Card View"
+                        >
+                            <LayoutGrid size={18} />
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('list')}
+                            className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-rose-100 text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            title="List View"
+                        >
+                            <LayoutList size={18} />
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -441,7 +553,7 @@ const App: React.FC = () => {
           <div className={viewMode === 'card' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6" : "space-y-4 max-w-3xl mx-auto"}>
             {filteredMemories.length === 0 ? (
                  <div className="col-span-full text-center py-10 text-slate-400">
-                    <p>No memories match your search.</p>
+                    <p>No memories match your filters.</p>
                  </div>
             ) : (
                 filteredMemories.map(memory => (

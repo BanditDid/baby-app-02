@@ -52,12 +52,15 @@ export const loadGoogleApi = (onLoad: () => void) => {
             try {
                 await gapi.client.init({
                     apiKey: currentConfig.apiKey,
+                    discoveryDocs: [
+                        'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+                        'https://sheets.googleapis.com/$discovery/rest?version=v4'
+                    ]
                 });
-
-                await Promise.all([
-                    gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'),
-                    gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4')
-                ]);
+                
+                // Explicit load to be safe
+                await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+                await gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
 
                 gapiInited = true;
                 if (gisInited) onLoad();
@@ -74,7 +77,7 @@ export const loadGoogleApi = (onLoad: () => void) => {
         try {
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: currentConfig.clientId,
-                scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets',
+                scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
                 callback: (resp: any) => {
                     console.log("Token client initialized", resp);
                 },
@@ -89,6 +92,47 @@ export const loadGoogleApi = (onLoad: () => void) => {
   };
 
   waitForScripts();
+};
+
+export const getUserProfile = async (): Promise<any> => {
+    const gapi = (window as any).gapi;
+    try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: {
+                Authorization: `Bearer ${gapi.client.getToken().access_token}`,
+            },
+        });
+        return await response.json();
+    } catch (error) {
+        console.error("Failed to fetch user profile", error);
+        throw error;
+    }
+};
+
+export const validateUserAccess = async (userEmail: string): Promise<boolean> => {
+    const gapi = (window as any).gapi;
+    try {
+        // Check 'Login' sheet, column A
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: currentConfig.spreadsheetId,
+            range: 'Login!A:A', 
+        });
+
+        const rows = response.result.values;
+        if (!rows || rows.length === 0) {
+            console.warn("Login sheet is empty or missing.");
+            return false; 
+        }
+
+        // Check if email exists in the list (case insensitive)
+        const allowedEmails = rows.flat().map((email: string) => email.trim().toLowerCase());
+        return allowedEmails.includes(userEmail.trim().toLowerCase());
+
+    } catch (error: any) {
+        console.error("Validation Error:", error);
+        // If sheet doesn't exist, specific error handling could go here
+        throw new Error("Could not verify access. Please ensure a sheet named 'Login' exists.");
+    }
 };
 
 export const handleGoogleLogin = (): Promise<void> => {

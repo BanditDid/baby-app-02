@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { X, Copy, ExternalLink, AlertTriangle, CheckCircle } from 'lucide-react';
+import { X, Copy, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
 
 interface GoogleSetupModalProps {
@@ -30,7 +29,7 @@ export const GoogleSetupModal: React.FC<GoogleSetupModalProps> = ({ isOpen, onCl
               Google Cloud Setup Required
             </h2>
             <p className="text-slate-300 text-sm mt-1">
-              To save photos to Drive & Sheets, you must configure your own Google Project.
+              Follow these steps to connect your Google Drive & Sheets.
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
@@ -45,9 +44,9 @@ export const GoogleSetupModal: React.FC<GoogleSetupModalProps> = ({ isOpen, onCl
           <div className="space-y-2">
             <h3 className="font-bold text-lg flex items-center gap-2">
               <span className="bg-rose-100 text-rose-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">1</span>
-              Get your Origin URL
+              Copy Origin URL
             </h3>
-            <p className="text-sm text-slate-500">You must add this URL to "Authorized JavaScript origins" in Google Cloud Console.</p>
+            <p className="text-sm text-slate-500">Add this to "Authorized JavaScript origins" in Google Cloud Console.</p>
             <div className="flex gap-2">
               <code className="flex-1 bg-slate-100 p-3 rounded-lg border border-slate-200 font-mono text-sm">
                 {currentOrigin}
@@ -62,36 +61,43 @@ export const GoogleSetupModal: React.FC<GoogleSetupModalProps> = ({ isOpen, onCl
           <div className="space-y-2">
             <h3 className="font-bold text-lg flex items-center gap-2">
               <span className="bg-rose-100 text-rose-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">2</span>
-              Create Project & Keys
+              Google Cloud Console
             </h3>
             <ol className="list-decimal list-inside space-y-2 text-sm ml-2">
-              <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline inline-flex items-center">Google Cloud Console <ExternalLink size={12} className="ml-1"/></a>.</li>
-              <li>Create a <strong>New Project</strong>.</li>
-              <li>Go to <strong>APIs & Services &gt; Library</strong> and enable:
-                <ul className="list-disc list-inside ml-4 text-slate-500 mt-1">
-                  <li>Google Drive API</li>
-                  <li>Google Sheets API</li>
-                </ul>
-              </li>
-              <li>Go to <strong>Credentials</strong>:
-                <ul className="list-disc list-inside ml-4 text-slate-500 mt-1">
-                  <li>Create <strong>API Key</strong>.</li>
-                  <li>Create <strong>OAuth Client ID</strong> (Application type: Web application).</li>
-                  <li>Paste your Origin URL (from Step 1) into <strong>Authorized JavaScript origins</strong>.</li>
-                </ul>
-              </li>
-              <li><strong>IMPORTANT:</strong> Go to <strong>OAuth consent screen</strong> and add your email as a <strong>Test User</strong>.</li>
+              <li>Create a <strong>New Project</strong> at <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Google Cloud Console</a>.</li>
+              <li>Enable <strong>Google Drive API</strong> and <strong>Google Sheets API</strong>.</li>
+              <li>Create <strong>OAuth Client ID</strong> (Web application).</li>
+              <li>Paste your URL from Step 1 into <strong>Authorized JavaScript origins</strong>.</li>
+              <li>Add your email as a <strong>Test User</strong> in OAuth consent screen.</li>
             </ol>
           </div>
 
-          {/* Step 3 */}
+          {/* Step 3 - Login Sheet */}
           <div className="space-y-2">
             <h3 className="font-bold text-lg flex items-center gap-2">
               <span className="bg-rose-100 text-rose-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">3</span>
-              Update Code
+              Create 'Login' Sheet (Whitelist)
+            </h3>
+            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
+                <p className="font-bold mb-2">Mandatory for Access Control:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                    <li>Open your Google Sheet.</li>
+                    <li>Create a new tab (sheet) named exactly <strong>Login</strong>.</li>
+                    <li>In cell <strong>A1</strong>, type: <code>admin@admin.com</code></li>
+                    <li>In cell <strong>A2</strong>, type: <code>your-email@gmail.com</code></li>
+                </ol>
+                <p className="mt-2 text-xs text-yellow-700">Only emails listed in Column A of this sheet can log in.</p>
+            </div>
+          </div>
+
+           {/* Step 4 */}
+           <div className="space-y-2">
+            <h3 className="font-bold text-lg flex items-center gap-2">
+              <span className="bg-rose-100 text-rose-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">4</span>
+              Connect App
             </h3>
             <p className="text-sm">
-              Open <code>services/googleCloudService.ts</code> and replace the variables at the top with your new keys.
+              Click the <strong>Settings (Gear Icon)</strong> in this app and paste your Client ID, API Key, and Sheet ID.
             </p>
           </div>
 
