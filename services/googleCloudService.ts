@@ -8,19 +8,19 @@ import { Memory } from "../types";
 
 // 1. ใส่ Client ID ของคุณที่ได้จาก Google Cloud Console (OAuth 2.0 Client IDs)
 // ตัวอย่าง: '123456789-abcdefg.apps.googleusercontent.com'
-const CLIENT_ID: string = 'Input_CLIENT_ID'; 
+const CLIENT_ID: string = Input_CLIENT_ID; 
 
 // 2. ใส่ API Key ของคุณที่ได้จาก Google Cloud Console (API Keys)
 // ตัวอย่าง: 'AIzaSyD...'
-const API_KEY: string = 'Input_API_KEY'; 
+const API_KEY: string = Input_API_KEY; 
 
 // 3. ใส่ ID ของ Google Sheet ที่ต้องการบันทึกข้อมูล (ดูจาก URL ของ Sheet: /spreadsheets/d/ID_ตรงนี้/edit)
 // ตัวอย่าง: '1lazAXTiO8JHt81dZGq1xSNOs2gODqgH9JpDCcCjNrmk'
-const SPREADSHEET_ID: string = 'Input_SPREADSHEET_ID';
+const SPREADSHEET_ID: string = Input_SPREADSHEET_ID;
 
 // 4. (ตัวเลือก) ใส่ ID ของโฟลเดอร์ใน Google Drive ที่ต้องการเก็บรูป (ถ้าไม่ใส่จะเก็บที่ root)
 // ตัวอย่าง: '18ZbzarqyVEesE82sheKorB5E-qwY4pDW'
-const DRIVE_FOLDER_ID: string = 'Input_DRIVE_FOLDER_ID'; 
+const DRIVE_FOLDER_ID: string = Input_DRIVE_FOLDER_ID; 
 
 // Scope สิทธิ์ที่เราต้องการขอจากผู้ใช้ (Drive สำหรับรูป, Spreadsheets สำหรับข้อมูล)
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
